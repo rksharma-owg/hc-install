@@ -1,0 +1,58 @@
+name: contribution-preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Contribution commit to validate
+        required: true
+        type: string
+
+jobs:
+  copywrite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.target_sha }}
+      - uses: hashicorp/setup-copywrite@32638da2d4e81d56a0764aa1547882fc4d209636
+      - run: copywrite headers --plan
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        go_version: ['1.26.x', '1.27.x']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.target_sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: ${{ matrix.go_version }}
+      - run: test -z "$(gofmt -s -l .)"
+      - run: go vet ./...
+      - run: go build -v .
+
+  tests:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+        go_version: ['1.26.x', '1.27.x']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.target_sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: ${{ matrix.go_version }}
+      - run: go test -v -cover -race ./...
+        timeout-minutes: 10
+      - run: go test -timeout=60m -v ./...
+        timeout-minutes: 70
